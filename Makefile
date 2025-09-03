@@ -1,22 +1,38 @@
-FC=gfortran 
-FFLAGS=-O3 -Wall -Wextra -fdefault-real-8 -fimplicit-none -std=f2003 
-INCLUDE=-I/usr/local/include
+FC=gfortran-11 
+FFLAGS=-O3 #-Wall -Wextra -fdefault-real-8 -fimplicit-none -std=f2003 
+INCLUDE=-I/mnt/projects/gits/hit_pseudo_spectral/tpl/fftw/include
 
 
-FFT_LIB:=/usr/local/lib
+FFT_LIB:=/mnt/projects/gits/hit_pseudo_spectral/tpl/fftw/lib
 LDFLAGS+=-L$(FFT_LIB) -lfftw3 -lm
 
-all: main
 
-main.o: main.f90
-	$(FC) $(INCLUDE) $(FFLAGS) -c main.f90
+# SOURCE File
+MODULE_SRC = fft_module.f90
+MAIN_SRC = main.f90
 
-module.o: fft_module.f90
-	$(FC) $(INCLUDE) $(FFLAGS) -c main.f90
+#OBJECT File
+MODULE_OBJ = $(MODULE_SRC:.f90=.o)
+MAIN_OBJ = $(MAIN_SRC:.f90=.o)
+
+# Executable
+EXE = hit_cpu
+
+all: $(EXE)
+
+# Link Executable
+$(EXE): $(MODULE_OBJ) $(MAIN_OBJ)
+	$(FC) $(FFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Compile Module
+$(MODULE_OBJ): $(MODULE_SRC)
+	$(FC) $(INCLUDE) $(FFLAGS) -c $<
+
+# Compile main programs
+$(MAIN_OBJ): $(MAIN_SRC) $(MODULE_OBJ)
+	$(FC) $(INCLUDE) $(FFLAGS) -c $<
 
 
-main: main.o
-	$(FC) -o main main.o $(LDFLAGS)
-
+# Clean
 clean:
-	rm -f *.o *.mod main *.tec *.dat
+	rm -f $(EXE) *.o *.mod
