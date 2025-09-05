@@ -1,11 +1,11 @@
-FC=gfortran-11 
+FC=gfortran-11 -Wall -fimplicit-none -J.
 FFLAGS=-O3 #-Wall -Wextra -fdefault-real-8 -fimplicit-none -std=f2003 
 INCLUDE=-I/mnt/projects/gits/hit_pseudo_spectral/tpl/fftw/include
 
 
-FFT_LIB:=/mnt/projects/gits/hit_pseudo_spectral/tpl/fftw/lib
-LDFLAGS+=-L$(FFT_LIB) -lfftw3 -lm
-
+FFT_LIB=/mnt/projects/gits/hit_pseudo_spectral/tpl/fftw/lib
+LDFLAGS=-L$(FFT_LIB) -Wl,-rpath=$(FFT_LIB) -lfftw3 -lm
+$(info LDFLAGS is $(LDFLAGS))
 
 # SOURCE File
 MODULE_SRC = fft_module.f90

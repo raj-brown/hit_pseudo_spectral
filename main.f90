@@ -5,30 +5,34 @@ program main
   use, intrinsic :: iso_c_binding
   use fft_module
   implicit none
+  include 'fftw3.f03'
 
   ! Mesh resolution
-  integer, parameter :: n=64, nx=n, ny=n, nz=n
-  integer, parameter :: nxnynz=nx*ny*nz
-  integer, parameter :: nhp1=n/2+1
+  integer, parameter :: n=64
+  integer, parameter :: nx=n, ny=n, nz=n
+  integer, parameter :: nxyz=nx*ny*nz
+  integer, parameter :: nhp=n/2+1
   integer, parameter :: ncube=n**3
   character(len=16) :: filename
   
   ! Arrays in physical space
   real(8), allocatable, dimension(:, :, :) :: ux, uy, uz
-  real(8), allocatable, dimension(:, :, :) :: vortx, vorty, vortz
+  real(8), allocatable, dimension(:, :, :) :: vortx_ini, vorty_ini, vortz_ini
+
+  !real(8), allocatable, dimension(:, :, :) :: vortx, vorty, vortz
   !real(8), allocatable, dimension(:, :, :) :: velvortx, velvorty, velvortz
-  !real(8), allocatable, dimension(:, :, :) :: uxg, uyg, uzg
+
 
   ! Arrays in spectral space
-  !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: ux_hat, uy_hat, uz_hat
+  complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: ux_hat_1, uy_hat_1, uz_hat_1
   !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: ux_hat2, uy_hat2, uz_hat2
   !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: omegax_hat, omegay_hat, omegaz_hat !vorticity: ω
   !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: vomegax_hat, vomegay_hat, vomegaz_hat ! u × ω
   !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: rhsx, rhsy, rhsz, rhsx0, rhsy0, rhsz0    ! RHS = F(u)
   
   ! Wavenumber related arrays
-  !real(8), allocatable, dimension(:, :, :) :: kx, ky, kz, k2, k2inv, kabs, ksqr
-  !integer, allocatable, dimension(:, :, :) :: ik2
+  real(8), allocatable, dimension(:, :, :) :: kx, ky, kz, k2, k2inv, kabs, ksqr
+  integer, allocatable, dimension(:, :, :) :: id_absk
   real(8), parameter :: pi=3.1415927410125732
   real(8), parameter :: pi2=2*pi
 
@@ -53,32 +57,43 @@ program main
   ! Benchnark timing and counters
   real :: start, finish
   integer :: i, j, k
+
+  type(C_PTR) :: plan_f, plan_b
   
   
   dx=pi2/nx
   dy=pi2/ny
   dz=pi2/nz
 
-  !allocate(ux(nx, ny, nz))
-  !allocate(uy(nx, ny, nz))
-  !allocate(uz(nx, ny, nz))
+  allocate(vortx_ini(nx, ny, nz))
+  allocate(vorty_ini(nx, ny, nz))
+  allocate(vortz_ini(nx, ny, nz))
+  allocate(ux_hat_1(nx/2 +1, ny, nz))
+
 
   ! Initialize velocity field according to the Taylor-Green Vortex case
+  call initial_condition(n, ux, uy, uz)
+   ! initial vorticity 
+  do k=1, n
+     do j=1, n
+        do i=1, n
+           vortx_ini(i,j,k) = -cos((i-0.5)*dx)*sin((j-0.5)*dy)*sin((k-0.5)*dz) 
+           vorty_ini(i,j,k) = -sin((i-0.5)*dx)*cos((j-0.5)*dy)*sin((k-0.5)*dz)
+           vortz_ini(i,j,k) = sin((i-0.5)*dx)*sin((j-0.5)*dy)*cos((k-0.5)*dz)+sin((i-0.5)*dx)*sin((j-0.5)*dy)*cos((k-0.5)*dz) 
+        enddo
+     enddo
+  enddo
 
-  call initial_condition(n, ux, uy, uz, vortx, vorty, vortz)
 
-  !do k=1, n
-  !   do j=1, n
-  !      do i=1, n
-  !         ux(i,j,k) = sin((i-0.5)*dx)*cos((j-0.5)*dy)*cos((k-0.5)*dz)
-  !         uy(i,j,k) = -cos((i-0.5)*dx)*sin((j-0.5)*dy)*cos((k-0.5)*dz)
-  !         uz(i,j,k) = 0
-  !      enddo
-  !   enddo
-  !enddo
+  call compute_wavenumbers(n, nhp, kx, ky, kz, k2, k2inv, kabs, id_absk)
+  call fft_init(nx, ny, nz, ux, ux_hat_1)
+  call fft_forward_execute()
+  call fft_inverse_execute()
+  call fft_cleanup()
+  call hit_rhs()
+  call ab_time_integrator()
 
-  print *, "ux", ux(1:5, 1:5, 1:5)
-  
+
   !------------------------------------------------------------
   ! Main time loop
   !------------------------------------------------------------
@@ -91,11 +106,11 @@ program main
   !   endif
   !enddo ! timeloop
 
- deallocate(ux, uy, uz)
-
+  deallocate(ux, uy, uz)
+  deallocate(vortx_ini, vorty_ini, vortz_ini)
   
   call cpu_time(finish)
-  write(*, "(1X, 1pe14.6)") finish - start
+  write(*, "(A, 1X, 1pe14.6)") 'elased_time:',  finish - start
 
 endprogram main
 
