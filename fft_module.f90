@@ -5,14 +5,13 @@ module fft_module
   private
   public :: fft_init, initial_condition, compute_wavenumbers
   public :: fft_forward_execute, fft_inverse_execute, fft_cleanup
+  
+
   public :: hit_rhs
   public :: ab_time_integrator, RK45_time_integrator, SSP_time_integrator
-  
+  public :: vtk_output
   integer::n=0, nx=0, ny=0, nz=0
   integer:: ncube
-  type(C_PTR) :: plan_forward=C_NULL_PTR
-  type(C_PTR) :: plan_inverse=C_NULL_PTR
-
   real(C_DOUBLE), pointer :: in_ptr(:, :, :)
   complex(C_DOUBLE_COMPLEX), pointer :: out_ptr(:, :, :)
 
@@ -78,18 +77,18 @@ contains
     enddo
 
     do j=1,n
-       if (i <= n/2) then
-          ky(:, j, :) = i-1
+       if (j <= n/2) then
+          ky(:, j, :) = j-1
        else
           kz(:, j, :) = -n+j-1
        endif
     enddo
 
     do k=1,n
-       if (i <= n/2) then
+       if (k <= n/2) then
           kz(:, :, k) = k-1
        else
-          kz(:, j, :) = -n+k-1
+          kz(:, :, k) = -n+k-1
        endif
     enddo
 
@@ -115,23 +114,20 @@ contains
 
   ! Subroutine for initializing the infrastructure for FFTW
   ! Which includes the creating forward and inverse plan and relevant data structures
-  subroutine fft_init(nx_in, ny_in, nz_in, in_array, out_array)
-    integer, intent(in):: nx_in, ny_in, nz_in
+  subroutine fft_init(nx_in, ny_in, nz_in, in_array, out_array, plan_forward, plan_inverse)
+    type(C_PTR), intent(out) :: plan_forward
+    type(C_PTR), intent(out) :: plan_inverse
+    integer, intent(in),target :: nx_in
+    integer, intent(in) :: ny_in, nz_in
     real(C_DOUBLE), intent(inout), target :: in_array(nx_in, ny_in, nz_in)
-    complex(C_DOUBLE_COMPLEX), intent(inout), target :: out_array((nx/2) + 1, ny, nz)
-
-    if (c_associated(plan_forward)) then
-       call fftw_destroy_plan(plan_forward)
-       plan_forward = C_NULL_PTR
-    end if
-    if (c_associated(plan_inverse)) then
-       call fftw_destroy_plan(plan_inverse)
-       plan_inverse = C_NULL_PTR
-    end if
+    complex(C_DOUBLE_COMPLEX), intent(inout), target :: out_array((nx_in/2) + 1, ny_in, nz_in)
+    plan_forward=C_NULL_PTR
+    plan_inverse=C_NULL_PTR
 
     nx = nx_in
     ny = ny_in
     nz = nz_in
+    
 
     in_ptr => in_array
     out_ptr => out_array
@@ -147,48 +143,71 @@ contains
        print *, "Inverse plan success!"
     end if
     
-    
      print *, "In fft subroutine "
    end subroutine fft_init
 
 
   ! Forward FFT
-  subroutine fft_forward_execute()
-    if (.not. c_associated(plan_forward)) then
+   subroutine fft_forward_execute(data_in_forward, data_out_forward, plan_forward)
+     type(C_PTR), intent(in) :: plan_forward
+     real(C_DOUBLE), intent(inout), target:: data_in_forward(nx, ny, nz)
+     complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_out_forward((nx/2)+1, ny, nz)
+         
+     in_ptr => data_in_forward
+     out_ptr => data_out_forward
+
+     if (.not. c_associated(plan_forward)) then
        print *, "Forward plan not initialized"
        stop 1
     end if
-    call fftw_execute_dft_r2c(plan_forward, in_ptr, out_ptr)
+    call fftw_execute_dft_r2c(plan_forward, data_in_forward, data_out_forward)
   end subroutine fft_forward_execute
 
+  
   ! Inverse FFT 
-  subroutine fft_inverse_execute()
-    if (.not. c_associated(plan_inverse)) then
-       print *, "Forward plan not initialized"
-       stop 1
-    end if
+  subroutine fft_inverse_execute(data_in_inverse, data_out_inverse, plan_inverse)
+    type(C_PTR), intent(in) :: plan_inverse
+    real(C_DOUBLE), intent(inout), target :: data_out_inverse(nx, ny, nz)
+    complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_in_inverse((nx/2)+1, ny, nz)
+
+    out_ptr => data_in_inverse
+    in_ptr => data_out_inverse
+  
     ncube = nx*ny*nz
     call fftw_execute_dft_c2r(plan_inverse, out_ptr, in_ptr)
     in_ptr(:, :, :) = in_ptr(:, :, :)/ncube
-    print *, in_ptr(1:2, 1:2, 1:2)
   end subroutine fft_inverse_execute
+
+
 
   ! clean up the fft analogous data structure and overheads
   subroutine fft_cleanup()
-    if(c_associated(plan_forward)) then
-       call fftw_destroy_plan(plan_forward)
-       plan_forward = C_NULL_PTR
-       print *, "Destroyed Forward Plan!"
-    end if
-    if (c_associated(plan_inverse)) then
-       call fftw_destroy_plan(plan_inverse)
-       plan_inverse=C_NULL_PTR
-       print *, "Destroyed Inverse Plan!"
-    end if
+  !  if(c_associated(plan_forward)) then
+  !     call fftw_destroy_plan(plan_forward)
+  !     plan_forward = C_NULL_PTR
+  !     print *, "Destroyed Forward Plan!"
+  !  end if
+  !  if (c_associated(plan_inverse)) then
+  !     call fftw_destroy_plan(plan_inverse)
+  !     plan_inverse=C_NULL_PTR
+  !     print *, "Destroyed Inverse Plan!"
+  !  end if
   end subroutine fft_cleanup
+
+
   
 
 
+  
+  subroutine vel_x_omega_physical()
+
+  end subroutine vel_x_omega_physical
+
+  subroutine vel_x_omega_forward_spectral()
+
+  end subroutine vel_x_omega_forward_spectral
+  
+  
   
   subroutine hit_rhs()
     print *, "In semi discrete form"
@@ -206,6 +225,57 @@ contains
   subroutine SSP_time_integrator()
     print *, "in time integration"
   end subroutine SSP_time_integrator
+
+  subroutine vtk_output(field, dx, dy, dz)
+    real(8), allocatable, dimension(:, :, :), intent(in)::field
+    character(len=50) :: filename    
+    real(8), intent(in):: dx, dy, dz
+    integer :: nx, ny, nz, i, j, k
+    integer :: unit
+    character(len=50) :: ext
+    character(len=50) :: output_file
+
+    ext=".vts"
+    output_file = filename // ext
+    print *, "Kind of dx", kind(dx)
+   
+    nx = size(field, 1)
+    ny = size(field, 2)
+    nz = size(field, 3)
+
+    write(filename, "('field',i10.10,'.plt')") 10
+    open(unit=100, file=filename, status="replace")
+
+    write(100, *) 'TITLE = "3D-Volume Data"'
+    write(100, *) 'VARIABLES = "X", "Y", "Z", "U"'
+    write(100, "('ZONE I=',i4,1x,', J=',i4,1x,', K=',i4,1x,'F=POINT')") nx, ny, nz
+    do k=1,nx
+      do j=1,ny
+         do i=1,nz
+            write(100, '(3(f8.5,2x), 1pe15.7, 2x)') &
+                 (i-0.5)*dx, (j-0.5)*dy, (k-0.5)*dz, &
+                 field(i,j,k)
+         enddo
+      enddo
+   enddo
+    
+  close(unit)
+
+
+
+
+
+
+
+
+
+    close(unit)
+
+    print *, "finished writing file", trim(filename)
+    
+    
+  end subroutine vtk_output
+  
   
 
 
