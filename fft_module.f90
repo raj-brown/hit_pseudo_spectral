@@ -30,9 +30,6 @@ contains
     dy = pi2/n
     dz = pi2/n
 
-    print *, "In initial conditons"
-    print *, "Value of n=", n
-
     allocate(ux(n, n, n))
     allocate(uy(n, n, n))
     allocate(uz(n, n, n))
@@ -80,7 +77,7 @@ contains
        if (j <= n/2) then
           ky(:, j, :) = j-1
        else
-          kz(:, j, :) = -n+j-1
+          ky(:, j, :) = -n+j-1
        endif
     enddo
 
@@ -127,7 +124,7 @@ contains
     nx = nx_in
     ny = ny_in
     nz = nz_in
-    
+    ncube = nx*ny*nz
 
     in_ptr => in_array
     out_ptr => out_array
@@ -152,16 +149,10 @@ contains
      type(C_PTR), intent(in) :: plan_forward
      real(C_DOUBLE), intent(inout), target:: data_in_forward(nx, ny, nz)
      complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_out_forward((nx/2)+1, ny, nz)
-         
      in_ptr => data_in_forward
      out_ptr => data_out_forward
-
-     if (.not. c_associated(plan_forward)) then
-       print *, "Forward plan not initialized"
-       stop 1
-    end if
-    call fftw_execute_dft_r2c(plan_forward, data_in_forward, data_out_forward)
-  end subroutine fft_forward_execute
+     call fftw_execute_dft_r2c(plan_forward, in_ptr, out_ptr)
+ end subroutine fft_forward_execute
 
   
   ! Inverse FFT 
@@ -169,13 +160,10 @@ contains
     type(C_PTR), intent(in) :: plan_inverse
     real(C_DOUBLE), intent(inout), target :: data_out_inverse(nx, ny, nz)
     complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_in_inverse((nx/2)+1, ny, nz)
-
     out_ptr => data_in_inverse
     in_ptr => data_out_inverse
-  
-    ncube = nx*ny*nz
     call fftw_execute_dft_c2r(plan_inverse, out_ptr, in_ptr)
-    in_ptr(:, :, :) = in_ptr(:, :, :)/ncube
+    data_out_inverse(:, :, :) = data_out_inverse(:, :, :)/ncube
   end subroutine fft_inverse_execute
 
 
@@ -237,7 +225,7 @@ contains
 
     ext=".vts"
     output_file = filename // ext
-    print *, "Kind of dx", kind(dx)
+    
    
     nx = size(field, 1)
     ny = size(field, 2)

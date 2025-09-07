@@ -21,8 +21,8 @@ program main
   real(8), allocatable, dimension(:, :, :) :: ux, uy, uz
   real(8), allocatable, dimension(:, :, :) :: vortx_ini, vorty_ini, vortz_ini
 
-  !real(8), allocatable, dimension(:, :, :) :: vortx, vorty, vortz
-  !real(8), allocatable, dimension(:, :, :) :: velvortx, velvorty, velvortz
+  real(8), allocatable, dimension(:, :, :) :: vortx, vorty, vortz
+  real(8), allocatable, dimension(:, :, :) :: velvortx, velvorty, velvortz
 
 
   ! Arrays in spectral space
@@ -35,7 +35,7 @@ program main
   ! Wavenumber related arrays
   real(8), allocatable, dimension(:, :, :) :: kx, ky, kz, k2, k2inv, kabs, ksqr
   integer, allocatable, dimension(:, :, :) :: id_absk
-  real(8), parameter :: pi=3.1415927410125732
+  real(8), parameter :: pi=4.0 * atan(1.0) 
   real(8), parameter :: pi2=2*pi
 
   ! Kinematic viscosity
@@ -68,18 +68,27 @@ program main
   allocate(vortx_ini(nx, ny, nz))
   allocate(vorty_ini(nx, ny, nz))
   allocate(vortz_ini(nx, ny, nz))
+
+  allocate(vortx(nx, ny, nz))
+  allocate(vorty(nx, ny, nz))
+  allocate(vortz(nx, ny, nz))
+
+  allocate(velvortx(nx, ny, nz))
+  allocate(velvorty(nx, ny, nz))
+  allocate(velvortz(nx, ny, nz))
+
+  
   allocate(ux_hat_1(nhp, ny, nz))
-  allocate(uy_hat_1(nx, ny, nz))
-  allocate(uz_hat_1(nx, ny, nz))
+  allocate(uy_hat_1(nhp, ny, nz))
+  allocate(uz_hat_1(nhp, ny, nz))
 
-  allocate(omegax_hat(nx, ny, nz))
-  allocate(omegay_hat(nx, ny, nz))
-  allocate(omegaz_hat(nx, ny, nz))
-
+  allocate(omegax_hat(nhp, ny, nz))
+  allocate(omegay_hat(nhp, ny, nz))
+  allocate(omegaz_hat(nhp, ny, nz))
 
   ! Initialize velocity field according to the Taylor-Green Vortex case
   call initial_condition(n, ux, uy, uz)
-  print *, 'size in physical space', size(ux), size(uy), size(uz)
+  
    ! initial vorticity 
   do k=1, n
      do j=1, n
@@ -96,30 +105,9 @@ program main
   !call vtk_output(vortx_ini, dx, dy, dz)
  
   call compute_wavenumbers(n, nhp, kx, ky, kz, k2, k2inv, kabs, id_absk)
-  call fft_init(nhp, ny, nz, uy, uy_hat_1, plan_f, plan_b)
+  call fft_init(nx, ny, nz, ux, ux_hat_1, plan_f, plan_b)
 
-  call fft_forward_execute(ux, ux_hat_1, plan_f)
-  call fft_forward_execute(uy, uy_hat_1, plan_f)
-  call fft_forward_execute(uz, uz_hat_1, plan_f)
-
-  do k=1,nz
-     do j=1,ny
-        do i=1, nhp
-           omegax_hat(i,j,k) = cmplx(0,1)*(ky(i,j,k)*uz_hat_1(i,j,k)-kz(i,j,k)*uy_hat_1(i,j,k))
-           omegay_hat(i,j,k) = cmplx(0,1)*(kz(i,j,k)*ux_hat_1(i,j,k)-kx(i,j,k)*uz_hat_1(i,j,k))
-           omegaz_hat(i,j,k) = cmplx(0,1)*(kx(i,j,k)*uy_hat_1(i,j,k)-ky(i,j,k)*ux_hat_1(i,j,k))
-        end do
-     end do
-  end do
-
-     call fft_inverse_execute(omegax_hat, ux, plan_b)
-
-     print *, 'rec1', omegax_hat(1:2, 1:2, 1:2)
-     !print *, 'rec2', uz(1:2, 1:2, 1:2)
-
-
-
-  
+    
   !------------------------------------------------------------
   ! Driver loop
   !------------------------------------------------------------
@@ -132,11 +120,7 @@ program main
      call fft_forward_execute(ux, ux_hat_1, plan_f)
      call fft_forward_execute(uy, uy_hat_1, plan_f)
      call fft_forward_execute(uz, uz_hat_1, plan_f)
-
-
-     ! call fft_inverse_execute_half_plane(ux_hat_1, ux, plan_b_1)
-     ! call fft_inverse_execute(uz_hat_1, uz, plan_b_2)
-     print *,"kyh", ky(1:2, 1:2, 1:2)
+          
 
      do k=1, nz
         do j=1, ny
@@ -148,11 +132,18 @@ program main
         end do
      end do
 
-     call fft_inverse_execute(omegax_hat, ux, plan_b)
+     call fft_inverse_execute(omegax_hat, vortx, plan_b)
+     call fft_inverse_execute(omegay_hat, vorty, plan_b)
+     call fft_inverse_execute(omegaz_hat, vortz, plan_b)
 
-     !print *, 'rec1', ux(1:2, 1:2, 1:2)
-     !print *, 'rec2', uz(1:2, 1:2, 1:2)
+     print *, 'rec1', vortx(1:2, 1:2, 1:2)
+     print *, 'rec2', vortx_ini(1:2, 1:2, 1:2)
+     print *, 'rec3', vorty(1:2, 1:2, 1:2)
+     print *, 'rec4', vorty_ini(1:2, 1:2, 1:2)
+     print *, 'rec5', vortz(1:2, 1:2, 1:2)
+     print *, 'rec6', vortz_ini(1:2, 1:2, 1:2)
 
+     
   enddo
 
   deallocate(ux, uy, uz)
