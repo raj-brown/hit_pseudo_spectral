@@ -29,7 +29,7 @@ program main
   complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: ux_hat_1, uy_hat_1, uz_hat_1
   !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: ux_hat2, uy_hat2, uz_hat2
    complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: omegax_hat, omegay_hat, omegaz_hat !vorticity: ω
-  !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: vomegax_hat, vomegay_hat, vomegaz_hat ! u × ω
+  complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: vomegax_hat, vomegay_hat, vomegaz_hat ! u × ω
   !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: rhsx, rhsy, rhsz, rhsx0, rhsy0, rhsz0    ! RHS = F(u)
   
   ! Wavenumber related arrays
@@ -86,6 +86,11 @@ program main
   allocate(omegay_hat(nhp, ny, nz))
   allocate(omegaz_hat(nhp, ny, nz))
 
+  allocate(vomegax_hat(nhp, ny, nz))
+  allocate(vomegay_hat(nhp, ny, nz))
+  allocate(vomegaz_hat(nhp, ny, nz))
+
+  
   ! Initialize velocity field according to the Taylor-Green Vortex case
   call initial_condition(n, ux, uy, uz)
   
@@ -135,7 +140,6 @@ program main
      call fft_inverse_execute(omegax_hat, vortx, plan_b)
      call fft_inverse_execute(omegay_hat, vorty, plan_b)
      call fft_inverse_execute(omegaz_hat, vortz, plan_b)
-
      print *, 'rec1', vortx(1:2, 1:2, 1:2)
      print *, 'rec2', vortx_ini(1:2, 1:2, 1:2)
      print *, 'rec3', vorty(1:2, 1:2, 1:2)
@@ -143,9 +147,39 @@ program main
      print *, 'rec5', vortz(1:2, 1:2, 1:2)
      print *, 'rec6', vortz_ini(1:2, 1:2, 1:2)
 
+
+     do k=1, nz
+        do j=1, ny
+           do i=1, nx
+              velvortx(i, j, k) = ux(i,j,k) * vortx(i,j,k)
+              velvorty(i, j, k) = uy(i,j,k) * vorty(i,j,k)
+              velvortz(i, j, k) = uz(i,j,k) * vortz(i,j,k)
+           end do
+        end do
+     end do
+
+     print *, 'rec_curl', velvortx(1:2, 1:2, 1:2)
+
+     call fft_forward_execute(velvortx, vomegax_hat, plan_f)
+     call fft_forward_execute(velvorty, vomegax_hat, plan_f)
+     call fft_forward_execute(velvortz, vomegax_hat, plan_f)
+     
+     
+
+
+
+
+     
+     
      
   enddo
 
+
+
+
+
+  call fft_cleanup(plan_f)
+  call fft_cleanup(plan_b)
   deallocate(ux, uy, uz)
   deallocate(vortx_ini, vorty_ini, vortz_ini)
   

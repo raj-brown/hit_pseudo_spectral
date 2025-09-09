@@ -116,8 +116,8 @@ contains
     type(C_PTR), intent(out) :: plan_inverse
     integer, intent(in),target :: nx_in
     integer, intent(in) :: ny_in, nz_in
-    real(C_DOUBLE), intent(inout), target :: in_array(nx_in, ny_in, nz_in)
-    complex(C_DOUBLE_COMPLEX), intent(inout), target :: out_array((nx_in/2) + 1, ny_in, nz_in)
+    real(C_DOUBLE), intent(inout), target :: in_array(:, :, :) 
+    complex(C_DOUBLE_COMPLEX), intent(inout), target :: out_array(:, :, :) 
     plan_forward=C_NULL_PTR
     plan_inverse=C_NULL_PTR
 
@@ -147,8 +147,8 @@ contains
   ! Forward FFT
    subroutine fft_forward_execute(data_in_forward, data_out_forward, plan_forward)
      type(C_PTR), intent(in) :: plan_forward
-     real(C_DOUBLE), intent(inout), target:: data_in_forward(nx, ny, nz)
-     complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_out_forward((nx/2)+1, ny, nz)
+     real(C_DOUBLE), intent(inout), target:: data_in_forward(:, :, :)
+     complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_out_forward(:, :, :)
      in_ptr => data_in_forward
      out_ptr => data_out_forward
      call fftw_execute_dft_r2c(plan_forward, in_ptr, out_ptr)
@@ -158,8 +158,8 @@ contains
   ! Inverse FFT 
   subroutine fft_inverse_execute(data_in_inverse, data_out_inverse, plan_inverse)
     type(C_PTR), intent(in) :: plan_inverse
-    real(C_DOUBLE), intent(inout), target :: data_out_inverse(nx, ny, nz)
-    complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_in_inverse((nx/2)+1, ny, nz)
+    real(C_DOUBLE), intent(inout), target :: data_out_inverse(:, :, :)
+    complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_in_inverse(:, :, :)
     out_ptr => data_in_inverse
     in_ptr => data_out_inverse
     call fftw_execute_dft_c2r(plan_inverse, out_ptr, in_ptr)
@@ -169,17 +169,13 @@ contains
 
 
   ! clean up the fft analogous data structure and overheads
-  subroutine fft_cleanup()
-  !  if(c_associated(plan_forward)) then
-  !     call fftw_destroy_plan(plan_forward)
-  !     plan_forward = C_NULL_PTR
-  !     print *, "Destroyed Forward Plan!"
-  !  end if
-  !  if (c_associated(plan_inverse)) then
-  !     call fftw_destroy_plan(plan_inverse)
-  !     plan_inverse=C_NULL_PTR
-  !     print *, "Destroyed Inverse Plan!"
-  !  end if
+  subroutine fft_cleanup(plan)
+    type(C_PTR), intent(inout) :: plan
+    if(c_associated(plan)) then
+       call fftw_destroy_plan(plan)
+       plan = C_NULL_PTR
+       print *, "Destroyed plan", plan
+    end if
   end subroutine fft_cleanup
 
 
