@@ -2,5 +2,5 @@ tpl/
 *.o
 *.mod
 *.plt
-
+*.vtx
 
