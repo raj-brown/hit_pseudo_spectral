@@ -185,6 +185,8 @@ program main
          end do
       end do
 
+      ! Compute RHS
+
       do k = 1, nz
          do j = 1, ny
             do i = 1, nhp
@@ -212,16 +214,21 @@ program main
          end do
       end do
 
+      ! Stage storage for time integrator at first step
+
       if (istep == 1) then
          rhsx_prev_hat = vomegax_hat
          rhsy_prev_hat = vomegay_hat
          rhsz_prev_hat = vomegaz_hat
       end if
 
+      ! Time integrate
+
       call ab_time_integrator(nhp, nx, ny, dt, ux_hat, uy_hat, uz_hat, &
                               rhsx_prev_hat, rhsy_prev_hat, rhsz_prev_hat, &
                               rhsx_hat, rhsy_hat, rhsz_hat)
 
+      ! Stage Storage for AB Integrator
       rhsx_prev_hat = rhsx_hat
       rhsy_prev_hat = rhsy_hat
       rhsz_prev_hat = rhsz_hat
