@@ -1,5 +1,6 @@
 tpl/
 *.o
 *.mod
+*.plt
 
 

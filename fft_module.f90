@@ -5,9 +5,6 @@ module fft_module
   private
   public :: fft_init, initial_condition, compute_wavenumbers
   public :: fft_forward_execute, fft_inverse_execute, fft_cleanup
-  
-
-  public :: hit_rhs
   public :: ab_time_integrator, RK45_time_integrator, SSP_time_integrator
   public :: vtk_output
   integer::n=0, nx=0, ny=0, nz=0
@@ -179,26 +176,29 @@ contains
   end subroutine fft_cleanup
 
 
+      
   
+  subroutine ab_time_integrator(&
+       nhp, ny, nz, dt, &
+       ux_hat, uy_hat, uz_hat, &
+       rhsx_prev_hat, rhsy_prev_hat, rhsz_prev_hat, &
+       rhsx_hat, rhsy_hat, rhsz_hat)
+    integer, intent(in) :: nhp, ny, nz
+    real(8), intent(in) :: dt
+    complex(C_DOUBLE_COMPLEX), intent(inout) :: ux_hat(:, :, :), uy_hat(:, :, :), uz_hat(:, :, :)
+    complex(C_DOUBLE_COMPLEX), intent(in) :: rhsx_prev_hat(:, :, :), rhsy_prev_hat(:, :, :), rhsz_prev_hat(:, :, :)
+    complex(C_DOUBLE_COMPLEX), intent(in) :: rhsx_hat(:, :, :), rhsy_hat(:, :, :), rhsz_hat(:, :, :)
+    integer :: i, j, k
 
-
-  
-  subroutine vel_x_omega_physical()
-
-  end subroutine vel_x_omega_physical
-
-  subroutine vel_x_omega_forward_spectral()
-
-  end subroutine vel_x_omega_forward_spectral
-  
-  
-  
-  subroutine hit_rhs()
-    print *, "In semi discrete form"
-  end subroutine hit_rhs
-
-  subroutine ab_time_integrator()
-    print *, "in time integration"
+    do k=1, nz
+       do j=1, ny
+          do i=1, nhp
+             ux_hat(i, j, k) = ux_hat(i, j, k) + 0.5*dt *(3*rhsx_hat(i, j, k) - rhsx_prev_hat(i, j, k))
+             uy_hat(i, j, k) = uy_hat(i, j, k) + 0.5*dt *(3*rhsy_hat(i, j, k) - rhsy_prev_hat(i, j, k))
+             uz_hat(i, j, k) = uz_hat(i, j, k) + 0.5*dt *(3*rhsz_hat(i, j, k) - rhsz_prev_hat(i, j, k))
+          enddo
+       enddo
+    enddo
   end subroutine ab_time_integrator
 
 
@@ -242,23 +242,10 @@ contains
          enddo
       enddo
    enddo
-    
-  close(unit)
+   close(unit)
+   print *, "finished writing file", trim(filename)
 
-
-
-
-
-
-
-
-
-    close(unit)
-
-    print *, "finished writing file", trim(filename)
-    
-    
-  end subroutine vtk_output
+ end subroutine vtk_output
   
   
 

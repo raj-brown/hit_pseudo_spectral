@@ -26,11 +26,12 @@ program main
 
 
   ! Arrays in spectral space
+  complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: ux_hat, uy_hat, uz_hat
   complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: ux_hat_1, uy_hat_1, uz_hat_1
-  !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: ux_hat2, uy_hat2, uz_hat2
    complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: omegax_hat, omegay_hat, omegaz_hat !vorticity: ω
   complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: vomegax_hat, vomegay_hat, vomegaz_hat ! u × ω
-  !complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: rhsx, rhsy, rhsz, rhsx0, rhsy0, rhsz0    ! RHS = F(u)
+  complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: rhsx_prev_hat, rhsy_prev_hat, rhsz_prev_hat  ! RHS = F(u); stage Storage
+  complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: rhsx_hat, rhsy_hat, rhsz_hat    ! RHS = F(u) Running storage
   
   ! Wavenumber related arrays
   real(8), allocatable, dimension(:, :, :) :: kx, ky, kz, k2, k2inv, kabs, ksqr
@@ -44,7 +45,7 @@ program main
   integer :: istep
 
   ! Number of timesteps
-  integer, parameter :: nsteps=1
+  integer, parameter :: nsteps=10
 
   ! output to be written
   integer, parameter :: ndump=50
@@ -78,9 +79,14 @@ program main
   allocate(velvortz(nx, ny, nz))
 
   
+  allocate(ux_hat(nhp, ny, nz))
+  allocate(uy_hat(nhp, ny, nz))
+  allocate(uz_hat(nhp, ny, nz))
+
   allocate(ux_hat_1(nhp, ny, nz))
   allocate(uy_hat_1(nhp, ny, nz))
   allocate(uz_hat_1(nhp, ny, nz))
+
 
   allocate(omegax_hat(nhp, ny, nz))
   allocate(omegay_hat(nhp, ny, nz))
@@ -89,6 +95,14 @@ program main
   allocate(vomegax_hat(nhp, ny, nz))
   allocate(vomegay_hat(nhp, ny, nz))
   allocate(vomegaz_hat(nhp, ny, nz))
+
+  allocate(rhsx_prev_hat(nhp, ny, nz))
+  allocate(rhsy_prev_hat(nhp, ny, nz))
+  allocate(rhsz_prev_hat(nhp, ny, nz))
+
+  allocate(rhsx_hat(nhp, ny, nz))
+  allocate(rhsy_hat(nhp, ny, nz))
+  allocate(rhsz_hat(nhp, ny, nz))
 
   
   ! Initialize velocity field according to the Taylor-Green Vortex case
@@ -110,8 +124,12 @@ program main
   !call vtk_output(vortx_ini, dx, dy, dz)
  
   call compute_wavenumbers(n, nhp, kx, ky, kz, k2, k2inv, kabs, id_absk)
-  call fft_init(nx, ny, nz, ux, ux_hat_1, plan_f, plan_b)
+  call fft_init(nx, ny, nz, ux, ux_hat, plan_f, plan_b)
 
+  call fft_forward_execute(ux, ux_hat, plan_f)
+  call fft_forward_execute(uy, uy_hat, plan_f)
+  call fft_forward_execute(uz, uz_hat, plan_f)
+     
     
   !------------------------------------------------------------
   ! Driver loop
@@ -120,19 +138,21 @@ program main
   call cpu_time(start)
 
   do istep=1, nsteps
-     
      write(*,"(I10,1X,1pe14.6)") istep, istep*dt
-     call fft_forward_execute(ux, ux_hat_1, plan_f)
-     call fft_forward_execute(uy, uy_hat_1, plan_f)
-     call fft_forward_execute(uz, uz_hat_1, plan_f)
-          
+     ux_hat_1 = ux_hat
+     uy_hat_1 = uy_hat
+     uz_hat_1 = uz_hat
 
-     do k=1, nz
+     call fft_inverse_execute(ux_hat_1, ux, plan_b)
+     call fft_inverse_execute(uy_hat_1, uy, plan_b)
+     call fft_inverse_execute(uy_hat_1, uz, plan_b)
+   
+       do k=1, nz
         do j=1, ny
            do i=1, nhp
-              omegax_hat(i,j,k) = cmplx(0,1)*(ky(i,j,k)*uz_hat_1(i,j,k)-kz(i,j,k)*uy_hat_1(i,j,k))
-              omegay_hat(i,j,k) = cmplx(0,1)*(kz(i,j,k)*ux_hat_1(i,j,k)-kx(i,j,k)*uz_hat_1(i,j,k))
-              omegaz_hat(i,j,k) = cmplx(0,1)*(kx(i,j,k)*uy_hat_1(i,j,k)-ky(i,j,k)*ux_hat_1(i,j,k)) 
+              omegax_hat(i,j,k) = cmplx(0,1)*(ky(i,j,k)*uz_hat(i,j,k)-kz(i,j,k)*uy_hat(i,j,k))
+              omegay_hat(i,j,k) = cmplx(0,1)*(kz(i,j,k)*ux_hat(i,j,k)-kx(i,j,k)*uz_hat(i,j,k))
+              omegaz_hat(i,j,k) = cmplx(0,1)*(kx(i,j,k)*uy_hat(i,j,k)-ky(i,j,k)*ux_hat(i,j,k)) 
            end do
         end do
      end do
@@ -140,13 +160,6 @@ program main
      call fft_inverse_execute(omegax_hat, vortx, plan_b)
      call fft_inverse_execute(omegay_hat, vorty, plan_b)
      call fft_inverse_execute(omegaz_hat, vortz, plan_b)
-     print *, 'rec1', vortx(1:2, 1:2, 1:2)
-     print *, 'rec2', vortx_ini(1:2, 1:2, 1:2)
-     print *, 'rec3', vorty(1:2, 1:2, 1:2)
-     print *, 'rec4', vorty_ini(1:2, 1:2, 1:2)
-     print *, 'rec5', vortz(1:2, 1:2, 1:2)
-     print *, 'rec6', vortz_ini(1:2, 1:2, 1:2)
-
 
      do k=1, nz
         do j=1, ny
@@ -161,16 +174,64 @@ program main
      print *, 'rec_curl', velvortx(1:2, 1:2, 1:2)
 
      call fft_forward_execute(velvortx, vomegax_hat, plan_f)
-     call fft_forward_execute(velvorty, vomegax_hat, plan_f)
-     call fft_forward_execute(velvortz, vomegax_hat, plan_f)
-     
-     
+     call fft_forward_execute(velvorty, vomegay_hat, plan_f)
+     call fft_forward_execute(velvortz, vomegaz_hat, plan_f)
+
+     ! Dealias Mode
+     do k=1, nz
+        do j=1, ny
+           do i=1, nhp
+              if (k2(i, j, k) > klimit) then
+                 vomegax_hat(i, j, k)=0.0
+                 vomegay_hat(i, j, k)=0.0
+                 vomegaz_hat(i, j, k)=0.0
+              endif
+           enddo
+        enddo
+     enddo
 
 
+     do k=1, nz
+        do j=1, ny
+           do i=1, nhp
+              rhsx_hat(i, j, k)= &
+                   vomegax_hat(i, j, k) - &
+                   visc*k2(i, j, k)*ux_hat(i, j, k) - &
+                   kx(i, j, k)*k2inv(i, j, k) * &
+                   (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
+                   + kz(i, j, k)*vomegaz_hat(i, j, k))
+
+              rhsy_hat(i, j, k)= &
+                   vomegay_hat(i, j, k) - &
+                   visc*k2(i, j, k)*uy_hat(i, j, k) - &
+                   ky(i, j, k)*k2inv(i, j, k) * &
+                   (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
+                   + kz(i, j, k)*vomegaz_hat(i, j, k))
+
+              rhsz_hat(i, j, k) = &
+                   vomegaz_hat(i, j, k) - &
+                   visc*k2(i, j, k)*uz_hat(i, j, k) - &
+                   kz(i, j, k)*k2inv(i, j, k) * &
+                   (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
+                   + kz(i, j, k)*vomegaz_hat(i, j, k))
+           enddo
+        enddo
+     enddo
+
+     if (istep==1)then
+        rhsx_prev_hat = vomegax_hat
+        rhsy_prev_hat = vomegay_hat
+        rhsz_prev_hat = vomegaz_hat
+     endif
+
+     call ab_time_integrator(nhp, nx, ny, dt, ux_hat, uy_hat, uz_hat, &
+          rhsx_prev_hat, rhsy_prev_hat, rhsz_prev_hat, &
+          rhsx_hat, rhsy_hat, rhsz_hat)
 
 
-     
-     
+     rhsx_prev_hat=rhsx_hat
+     rhsy_prev_hat=rhsy_hat
+     rhsz_prev_hat=rhsz_hat
      
   enddo
 
