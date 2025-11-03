@@ -13,7 +13,7 @@ program main
    integer, parameter :: nxyz = nx*ny*nz
    integer, parameter :: nhp = (n/2) + 1
    integer, parameter :: ncube = n**3
-   character(len=16) :: filename
+   !character(len=16) :: filename
    type(C_PTR) :: plan_f
    type(C_PTR) :: plan_b
 
@@ -33,7 +33,7 @@ program main
    complex(KIND=C_DOUBLE_COMPLEX), allocatable, dimension(:, :, :) :: rhsx_hat, rhsy_hat, rhsz_hat    ! RHS = F(u) Running storage
 
    ! Wavenumber related arrays
-   real(8), allocatable, dimension(:, :, :) :: kx, ky, kz, k2, k2inv, kabs, ksqr
+   real(8), allocatable, dimension(:, :, :) :: kx, ky, kz, k2, k2inv, kabs
    integer, allocatable, dimension(:, :, :) :: id_absk
    real(8), parameter :: pi = 4.0*atan(1.0)
    real(8), parameter :: pi2 = 2*pi
@@ -45,7 +45,7 @@ program main
 
    ! Number of timesteps
    integer, parameter :: nsteps = 2000
-   real(c_float) :: energy, energy_0, norm_energy
+   real(8) :: energy, energy_0, norm_energy
 
    ! output to be written
    integer, parameter :: ndump = 50
@@ -125,7 +125,7 @@ program main
    call fft_forward_execute(uy, uy_hat, plan_f)
    call fft_forward_execute(uz, uz_hat, plan_f)
 
-   energy_0 = 0.5 * sum(ux**2 + uy**2 + uz**2)/ nxyz
+   energy_0 = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
    print *, minval(id_absk)
    print *, "klimit", klimit
    !stop
@@ -145,7 +145,7 @@ program main
       call fft_inverse_execute(uy_hat_1, uy, plan_b)
       call fft_inverse_execute(uz_hat_1, uz, plan_b)
 
-      energy = 0.5 * sum(ux**2 + uy**2 + uz**2)/ nxyz
+      energy = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
 
       norm_energy = energy/energy_0
 
@@ -168,9 +168,9 @@ program main
       do k = 1, nz
          do j = 1, ny
             do i = 1, nx
-               velvortx(i, j, k) = uy(i,j,k)*vortz(i,j,k)-uz(i,j,k)*vorty(i,j,k)
-               velvorty(i, j, k) = uz(i,j,k)*vortx(i,j,k)-ux(i,j,k)*vortz(i,j,k)
-               velvortz(i, j, k) = ux(i,j,k)*vorty(i,j,k)-uy(i,j,k)*vortx(i,j,k)
+               velvortx(i, j, k) = uy(i, j, k)*vortz(i, j, k) - uz(i, j, k)*vorty(i, j, k)
+               velvorty(i, j, k) = uz(i, j, k)*vortx(i, j, k) - ux(i, j, k)*vortz(i, j, k)
+               velvortz(i, j, k) = ux(i, j, k)*vorty(i, j, k) - uy(i, j, k)*vortx(i, j, k)
             end do
          end do
       end do

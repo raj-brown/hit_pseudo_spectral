@@ -89,6 +89,7 @@ contains
          do j = 1, n
             do i = 1, nhp
                k2(i, j, k) = kx(i, j, k)**2 + ky(i, j, k)**2 + kz(i, j, k)**2
+               ind_k2(i, j, k) = int(sqrt(k2(i, j, k)) + 0.5)
                kabs(i, j, k) = sqrt(k2(i, j, k))
                if (k2(i, j, k) /= 0) then
                   k2inv(i, j, k) = 1.0/k2(i, j, k)
@@ -98,7 +99,6 @@ contains
             end do
          end do
       end do
-      ind_k2 = int(sqrt(k2) + 0.5)
    end subroutine compute_wavenumbers
 
    ! Subroutine for initializing the infrastructure for FFTW
