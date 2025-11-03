@@ -44,7 +44,8 @@ program main
    integer :: istep
 
    ! Number of timesteps
-   integer, parameter :: nsteps = 10
+   integer, parameter :: nsteps = 2000
+   real(c_float) :: energy, energy_0, norm_energy
 
    ! output to be written
    integer, parameter :: ndump = 50
@@ -54,7 +55,7 @@ program main
    real(8), parameter :: dt = 0.005
 
    !Spectral truncation  for dealiasing
-   real(8) :: klimit = n/3.
+   real(8) :: klimit = nx/3.
 
    ! Benchnark timing and counters
    real :: start, finish
@@ -115,8 +116,6 @@ program main
       end do
    end do
 
-   print *, "analytical vort:", vorty_ini(1:2, 1:2, 1:2)
-
    !call vtk_output(vortx_ini, dx, dy, dz)
 
    call compute_wavenumbers(n, nhp, kx, ky, kz, k2, k2inv, kabs, id_absk)
@@ -126,6 +125,11 @@ program main
    call fft_forward_execute(uy, uy_hat, plan_f)
    call fft_forward_execute(uz, uz_hat, plan_f)
 
+   energy_0 = 0.5 * sum(ux**2 + uy**2 + uz**2)/ nxyz
+   print *, minval(id_absk)
+   print *, "klimit", klimit
+   !stop
+
    !------------------------------------------------------------
    ! Driver loop
    !------------------------------------------------------------
@@ -133,14 +137,19 @@ program main
    call cpu_time(start)
 
    do istep = 1, nsteps
-      write (*, "(I10,1X,1pe14.6)") istep, istep*dt
       ux_hat_1 = ux_hat
       uy_hat_1 = uy_hat
       uz_hat_1 = uz_hat
 
       call fft_inverse_execute(ux_hat_1, ux, plan_b)
       call fft_inverse_execute(uy_hat_1, uy, plan_b)
-      call fft_inverse_execute(uy_hat_1, uz, plan_b)
+      call fft_inverse_execute(uz_hat_1, uz, plan_b)
+
+      energy = 0.5 * sum(ux**2 + uy**2 + uz**2)/ nxyz
+
+      norm_energy = energy/energy_0
+
+      write (*, "(A, 1X, I10, 1X, A, 1X, 1pe14.6, 1X, A, 1x 1pe14.6)") 'Step:', istep, 'Time:', istep*dt, 'Energy:', norm_energy
 
       do k = 1, nz
          do j = 1, ny
@@ -159,14 +168,14 @@ program main
       do k = 1, nz
          do j = 1, ny
             do i = 1, nx
-               velvortx(i, j, k) = ux(i, j, k)*vortx(i, j, k)
-               velvorty(i, j, k) = uy(i, j, k)*vorty(i, j, k)
-               velvortz(i, j, k) = uz(i, j, k)*vortz(i, j, k)
+               velvortx(i, j, k) = uy(i,j,k)*vortz(i,j,k)-uz(i,j,k)*vorty(i,j,k)
+               velvorty(i, j, k) = uz(i,j,k)*vortx(i,j,k)-ux(i,j,k)*vortz(i,j,k)
+               velvortz(i, j, k) = ux(i,j,k)*vorty(i,j,k)-uy(i,j,k)*vortx(i,j,k)
             end do
          end do
       end do
 
-      print *, 'rec_curl', velvortx(1:2, 1:2, 1:2)
+      !print *, 'rec_curl', velvortx(1:2, 1:2, 1:2)
 
       call fft_forward_execute(velvortx, vomegax_hat, plan_f)
       call fft_forward_execute(velvorty, vomegay_hat, plan_f)
@@ -176,7 +185,7 @@ program main
       do k = 1, nz
          do j = 1, ny
             do i = 1, nhp
-               if (k2(i, j, k) > klimit) then
+               if (id_absk(i, j, k) > klimit) then
                   vomegax_hat(i, j, k) = 0.0
                   vomegay_hat(i, j, k) = 0.0
                   vomegaz_hat(i, j, k) = 0.0
