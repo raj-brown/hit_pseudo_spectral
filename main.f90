@@ -128,7 +128,10 @@ program main
    energy_0 = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
    print *, minval(id_absk)
    print *, "klimit", klimit
-   !stop
+   ! Open text file for writing out energy
+   open (unit=10, file='ke.txt', status='replace', action='write')
+
+   !write(10, '(A)') 'i    t    ke'
 
    !------------------------------------------------------------
    ! Driver loop
@@ -137,6 +140,7 @@ program main
    call cpu_time(start)
 
    do istep = 1, nsteps
+      print '(A, 1X, I4, 1X, A, I4)', 'Time Step', istep, 'Total steps', nsteps
       ux_hat_1 = ux_hat
       uy_hat_1 = uy_hat
       uz_hat_1 = uz_hat
@@ -148,9 +152,7 @@ program main
       energy = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
 
       norm_energy = energy/energy_0
-
-      write (*, "(A, 1X, I10, 1X, A, 1X, 1pe14.6, 1X, A, 1x 1pe14.6)") 'Step:', istep, 'Time:', istep*dt, 'Energy:', norm_energy
-
+      write (10, '(I4, 1X, 1PE14.6, 1X, 1PE14.6)') istep, istep*dt, norm_energy
       do k = 1, nz
          do j = 1, ny
             do i = 1, nhp
@@ -252,5 +254,6 @@ program main
    call cpu_time(finish)
    write (*, "(A, 1X, 1pe14.6)") 'elased_time:', finish - start
 
+   close (10)
 end program main
 
