@@ -56,7 +56,7 @@ program main
   ! Benchnark timing and counters
   real :: start, finish
   integer :: i, j, k
-  integer :: stat_fplan, stat_iplan, plan, inv_plan
+  integer :: stat_fplan, stat_iplan, plan, inv_plan, f_status
 
 
   pi = 4.0*atan(1.0)
@@ -75,19 +75,57 @@ program main
   call compute_wavenumbers(n, nhp, kx, ky, kz, k2, k2inv, kabs, id_absk)
 
   ierr= cudaDeviceSynchronize()
-  print *, "ux is: ", ux(1:2, 1:2, 1:2)
-  print *, "ux is: ", vortx_ini(1:2, 1:2, 1:2)
+  !print *, "ux is: ", ux(1:2, 1:2, 1:2)
+  !print *, "ux is: ", vortx_ini(1:2, 1:2, 1:2)
 
   stat_fplan = cufftPlan3d(plan, nx, ny, nz, CUFFT_R2C)
 
  if ( stat_fplan /= CUFFT_SUCCESS) then
    print *,  "Forward Plan Did not initialize!"
  endif
-stat_iplan = cufftPlan3d(inv_plan, nx, ny, nz, CUFFT_C2R)
+ stat_iplan = cufftPlan3d(inv_plan, nx, ny, nz, CUFFT_C2R)
 
-if ( stat_iplan= CUFFT_SUCCESS) then
-  print *,  "Inverse  Plan Did not initialize!"
-endif
+ if (stat_iplan /= CUFFT_SUCCESS) then
+   print *,  "Inverse  Plan Did not initialize!"
+ endif
+
+  f_status = cufftExecR2C(plan, ux, ux_hat)
+
+  if (f_status /= 0) then
+    print *, "FORWARD FFT Failed!"
+  endif
+
+  f_status = cufftExecC2R(inv_plan, ux_hat, ux)
+
+  if (f_status /= 0) then
+    print *, "Inverse FFT Failed!"
+  endif
+
+  f_status = cufftExecR2C(plan, uy, uy_hat)
+  f_status = cufftExecR2C(plan, uz, uz_hat)
+
+  
+  !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+  do k = 1, nz
+    do j = 1, ny
+      do i = 1, nhp
+        omegax_hat(i, j, k) = cmplx(0, 1)*(ky(i, j, k)*uz_hat(i, j, k) - kz(i, j, k)*uy_hat(i, j, k))
+        omegay_hat(i, j, k) = cmplx(0, 1)*(kz(i, j, k)*ux_hat(i, j, k) - kx(i, j, k)*uz_hat(i, j, k))
+        omegaz_hat(i, j, k) = cmplx(0, 1)*(kx(i, j, k)*uy_hat(i, j, k) - ky(i, j, k)*ux_hat(i, j, k))
+      end do
+    end do
+  end do
+
+ f_status = cufftExecC2R(inv_plan, omegax_hat, ux)
+!f_status = cufftExecC2R(inv_plan, uy_hat, ux#)
+!  f_status = cufftExecC2R(inv_plan, uz_hat, uz)
+
+ierr= cudaDeviceSynchronize()
+  
+
+ print *, "Recosntructed is", ux(1:2,  1:2, 1:2)/nxyz
+ print *, "Actual is", vortx_ini(1:2, 1:2, 1:2)
+ 
 
 
   
@@ -95,10 +133,7 @@ endif
   !  !call vtk_output(vortx_ini, dx, dy, dz)
   
 
-  !  call fft_forward_execute(ux, ux_hat, plan_f)
-  !  call fft_forward_execute(uy, uy_hat, plan_f)
-  !  call fft_forward_execute(uz, uz_hat, plan_f)
-
+  
   !  energy_0 = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
   !  print *, minval(id_absk)
   !  print *, "klimit", klimit
