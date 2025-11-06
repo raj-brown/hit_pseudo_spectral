@@ -50,7 +50,7 @@ program main
   integer, parameter :: noutput = 50
 
   ! \Delta
-  real(kind=c_float), managed :: dt = 0.005
+  real(kind=c_float), managed :: dt = 0.01
 
   ! Spectral truncation  for dealiasing
   real(c_float), managed :: klimit = nx/3.
