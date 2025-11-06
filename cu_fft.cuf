@@ -12,7 +12,7 @@
 module cu_fft
   use iso_c_binding
 
-  integer, parameter :: nx=128, ny=128, nz=128, n=128
+  integer, parameter :: nx=64, ny=64, nz=64, n=64
   integer, parameter :: nhp = (n/2) + 1
   integer, parameter :: nxyz = nx*ny*nz
   

@@ -121,7 +121,7 @@ program main
 ierr= cudaDeviceSynchronize()
   
   
-  !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+  !$cuf kernel do(3) <<< (*, *), (32, 8) >>>
   do k = 1, nz
     do j = 1, ny
       do i = 1, nhp
@@ -176,7 +176,7 @@ ierr= cudaDeviceSynchronize()
       write (*, '(I4, 1X, 1PE14.6, 1X, 1PE14.6)') istep, istep*dt, norm_energy
 
         
-      !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      !$cuf kernel do(3) <<< (*, *), (64, 64) >>>
       do k = 1, nz
          do j = 1, ny
             do i = 1, nhp
@@ -193,7 +193,7 @@ ierr= cudaDeviceSynchronize()
       f_status = cufftExecC2R(inv_plan, omegaz_hat, vortz)
       ierr= cudaDeviceSynchronize()
 
-      !$ cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      !$ cuf kernel do(3) <<< (*, *), (64, 64) >>>
       do k = 1, nz
          do j = 1, ny
             do i = 1, nx
@@ -210,7 +210,7 @@ ierr= cudaDeviceSynchronize()
       f_status = cufftExecR2C(plan, velvortz, vomegaz_hat)
       ierr= cudaDeviceSynchronize()
 
-      !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      !$cuf kernel do(3) <<< (*, *), (64, 64) >>>
       do k=1, nz
         do j=1, ny
           do i=1, nhp
@@ -224,7 +224,7 @@ ierr= cudaDeviceSynchronize()
 
       ! Dealias Mode
       
-      !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      !$cuf kernel do(3) <<< (*, *), (64, 64) >>>
       do k = 1, nz
          do j = 1, ny
             do i = 1, nhp
