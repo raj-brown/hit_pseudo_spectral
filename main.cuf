@@ -11,15 +11,17 @@ program main
   
   ! Arrays in physical space
   real(kind=c_float), managed:: ux(n, n, n), uy(n, n, n), uz(n, n, n)
-  integer ierr
+  integer, managed :: ierr
   real(kind=c_float), managed :: vortx_ini(n, n, n), vorty_ini(n, n, n), vortz_ini(n, n, n)
-  real(kind=c_float), managed :: vortx(n, n, n), vort(n, n, n), vortz(n, n, n)
+  real(kind=c_float), managed :: vortx(n, n, n), vorty(n, n, n), vortz(n, n, n)
   real(kind=c_float), managed :: velvortx(n, n, n), velvorty(n, n, n), velvortz(n, n, n)
 
   ! Arrays in spectral space
   complex(kind=c_float_complex), managed :: ux_hat(nhp, ny, nz), uy_hat(nhp, ny, nz), uz_hat(nhp, ny, nz)
   complex(kind=c_float_complex), managed :: ux_hat_1(nhp, ny, nz), uy_hat_1(nhp, ny, nz), uz_hat_1(nhp, ny, nz)
   complex(kind=c_float_complex), managed :: omegax_hat(nhp, ny, nz), omegay_hat(nhp, ny, nz), omegaz_hat(nhp, ny, nz) !vorticity: ω
+
+  
   complex(kind=c_float_complex), managed :: vomegax_hat(nhp, ny, nz), vomegay_hat(nhp, ny, nz), vomegaz_hat(nhp, ny, nz) ! u × ω
   complex(kind=c_float_complex), managed :: rhsx_prev_hat(nhp, ny, nz), rhsy_prev_hat(nhp, ny, nz), rhsz_prev_hat(nhp, ny, nz)  ! RHS = F(u); stage Storage
   complex(kind=c_float_complex), managed :: rhsx_hat(nhp, ny, nz), rhsy_hat(nhp, ny, nz), rhsz_hat(nhp, ny, nz)    ! RHS = F(u) Running storage
@@ -28,18 +30,18 @@ program main
   real(kind=c_float), managed :: kx(nhp, ny, nz), ky(nhp, ny, nz), kz(nhp, ny, nz), k2(nhp, ny, nz), k2inv(nhp, ny, nz), kabs(nhp, ny, nz)
 
   integer, managed :: id_absk(nhp, ny, nz)
-  real(kind=c_float), managed :: pi
-  real(kind=c_float), managed :: pi2
+  real(kind=c_float) :: pi
+  real(kind=c_float) :: pi2
   
   ! Kinematic viscosity
-  real(kind=c_float), managed :: visc 
+  real(kind=c_float) :: visc 
   
-  real(kind=c_float), managed :: dx, dy, dz
-  integer, managed :: istep
+  real(kind=c_float) :: dx, dy, dz
+  integer :: istep
 
   !  ! Number of timesteps
   integer, parameter :: nsteps = 2000
-  real(kind=c_float), managed :: energy, energy_0, norm_energy
+  real(kind=c_float) :: energy, energy_0, norm_energy
 
   !  output to be written
   integer, parameter :: ndump = 50
@@ -48,16 +50,17 @@ program main
   integer, parameter :: noutput = 50
 
   ! \Delta
-  real(kind=c_float), parameter :: dt = 0.005
+  real(kind=c_float), managed :: dt = 0.005
 
   ! Spectral truncation  for dealiasing
-  real(8), managed :: klimit = nx/3.
+  real(c_float), managed :: klimit = nx/3.
+
 
   ! Benchnark timing and counters
   real :: start, finish
   integer :: i, j, k
   integer :: stat_fplan, stat_iplan, plan, inv_plan, f_status
-
+  
 
   pi = 4.0*atan(1.0)
   pi2 = 2*pi
@@ -71,9 +74,9 @@ program main
 
   !  ! Initialize velocity field according to the Taylor-Green Vortex case
   call initial_condition(n, ux, uy, uz)
-  call initial_vorticity(n, vortx_ini, vorty_ini, vortz_ini)
+  ierr= cudaDeviceSynchronize()
+  !call initial_vorticity(n, vortx_ini, vorty_ini, vortz_ini)
   call compute_wavenumbers(n, nhp, kx, ky, kz, k2, k2inv, kabs, id_absk)
-
   ierr= cudaDeviceSynchronize()
   !print *, "ux is: ", ux(1:2, 1:2, 1:2)
   !print *, "ux is: ", vortx_ini(1:2, 1:2, 1:2)
@@ -90,20 +93,33 @@ program main
  endif
 
   f_status = cufftExecR2C(plan, ux, ux_hat)
-
-  if (f_status /= 0) then
-    print *, "FORWARD FFT Failed!"
-  endif
-
-  f_status = cufftExecC2R(inv_plan, ux_hat, ux)
-
-  if (f_status /= 0) then
-    print *, "Inverse FFT Failed!"
-  endif
-
   f_status = cufftExecR2C(plan, uy, uy_hat)
   f_status = cufftExecR2C(plan, uz, uz_hat)
+  ierr= cudaDeviceSynchronize()
+  
+  !if (f_status /= 0) then
+  !  print *, "FORWARD FFT Failed!"
+  !endif
 
+  
+
+  !if (f_status /= 0) then
+  !  print *, "Inverse FFT Failed!"
+  !endif
+
+  
+ !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+  do k=1, nz
+    do j=1, ny
+      do i=1, nhp
+        ux_hat(i, j, k) = ux_hat(i, j, k)/nxyz
+        uy_hat(i, j, k) = uy_hat(i, j, k)/nxyz
+        uz_hat(i, j, k) = uz_hat(i, j, k)/nxyz
+      enddo
+    enddo
+  enddo
+ierr= cudaDeviceSynchronize()
+  
   
   !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
   do k = 1, nz
@@ -116,153 +132,153 @@ program main
     end do
   end do
 
- f_status = cufftExecC2R(inv_plan, omegax_hat, ux)
-!f_status = cufftExecC2R(inv_plan, uy_hat, ux#)
-!  f_status = cufftExecC2R(inv_plan, uz_hat, uz)
-
-ierr= cudaDeviceSynchronize()
+  ierr= cudaDeviceSynchronize()
   
+  !call vtk_output(vortx_ini, dx, dy, dz, nx, ny, nz)
+  
+  !compute energy
+  energy_0 = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
 
- print *, "Recosntructed is", ux(1:2,  1:2, 1:2)/nxyz
- print *, "Actual is", vortx_ini(1:2, 1:2, 1:2)
  
-
-
-  
-  
-  !  !call vtk_output(vortx_ini, dx, dy, dz)
+  ! Open text file for writing out energy
+  open (unit=10, file='ke.txt', status='replace', action='write')
+  write(10, '(A)') 'i    t    ke'
   
 
+
+  !------------------------------------------------------------
+  ! Driver loop
+  !------------------------------------------------------------
+
+  call cpu_time(start)
+
+   do istep = 1, nsteps
+     if (mod(istep, 50) == 0) then
+       print '(A, 1X, I4, 1X, A, I4)', 'Time Step', istep, 'Total steps: ', nsteps
+     endif
+     ierr= cudaDeviceSynchronize()
   
-  !  energy_0 = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
-  !  print *, minval(id_absk)
-  !  print *, "klimit", klimit
-  !  ! Open text file for writing out energy
-  !  open (unit=10, file='ke.txt', status='replace', action='write')
+      ux_hat_1 = ux_hat
+      uy_hat_1 = uy_hat
+      uz_hat_1 = uz_hat
+      ierr= cudaDeviceSynchronize()
+  
+      f_status = cufftExecC2R(inv_plan, ux_hat_1, ux)
+      f_status = cufftExecC2R(inv_plan, uy_hat_1, uy)
+      f_status = cufftExecC2R(inv_plan, uz_hat_1, uz)
+      ierr = cudaDeviceSynchronize()
+  
+      energy = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
+      ierr = cudaDeviceSynchronize()
+      
+      norm_energy = energy/energy_0
+      write (10, '(I4, 1X, 1PE14.6, 1X, 1PE14.6)') istep, istep*dt, norm_energy
+      write (*, '(I4, 1X, 1PE14.6, 1X, 1PE14.6)') istep, istep*dt, norm_energy
 
-  !  !write(10, '(A)') 'i    t    ke'
+        
+      !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      do k = 1, nz
+         do j = 1, ny
+            do i = 1, nhp
+               omegax_hat(i, j, k) = cmplx(0, 1)*(ky(i, j, k)*uz_hat(i, j, k) - kz(i, j, k)*uy_hat(i, j, k))
+               omegay_hat(i, j, k) = cmplx(0, 1)*(kz(i, j, k)*ux_hat(i, j, k) - kx(i, j, k)*uz_hat(i, j, k))
+               omegaz_hat(i, j, k) = cmplx(0, 1)*(kx(i, j, k)*uy_hat(i, j, k) - ky(i, j, k)*ux_hat(i, j, k))
+            end do
+         end do
+      end do
+      ierr= cudaDeviceSynchronize()
 
-  !  !------------------------------------------------------------
-  !  ! Driver loop
-  !  !------------------------------------------------------------
+      f_status = cufftExecC2R(inv_plan, omegax_hat, vortx)
+      f_status = cufftExecC2R(inv_plan, omegay_hat, vorty)
+      f_status = cufftExecC2R(inv_plan, omegaz_hat, vortz)
+      ierr= cudaDeviceSynchronize()
 
-  !  call cpu_time(start)
+      !$ cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      do k = 1, nz
+         do j = 1, ny
+            do i = 1, nx
+               velvortx(i, j, k) = uy(i, j, k)*vortz(i, j, k) - uz(i, j, k)*vorty(i, j, k)
+               velvorty(i, j, k) = uz(i, j, k)*vortx(i, j, k) - ux(i, j, k)*vortz(i, j, k)
+               velvortz(i, j, k) = ux(i, j, k)*vorty(i, j, k) - uy(i, j, k)*vortx(i, j, k)
+            end do
+         end do
+      end do
+      ierr= cudaDeviceSynchronize()
 
-  !  do istep = 1, nsteps
-  !     print '(A, 1X, I4, 1X, A, I4)', 'Time Step', istep, 'Total steps', nsteps
-  !     ux_hat_1 = ux_hat
-  !     uy_hat_1 = uy_hat
-  !     uz_hat_1 = uz_hat
+      f_status = cufftExecR2C(plan, velvortx, vomegax_hat)
+      f_status = cufftExecR2C(plan, velvorty, vomegay_hat)
+      f_status = cufftExecR2C(plan, velvortz, vomegaz_hat)
+      ierr= cudaDeviceSynchronize()
 
-  !     call fft_inverse_execute(ux_hat_1, ux, plan_b)
-  !     call fft_inverse_execute(uy_hat_1, uy, plan_b)
-  !     call fft_inverse_execute(uz_hat_1, uz, plan_b)
+      !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      do k=1, nz
+        do j=1, ny
+          do i=1, nhp
+            vomegax_hat(i, j, k) = vomegax_hat(i, j, k)/nxyz
+            vomegay_hat(i, j, k) = vomegay_hat(i, j, k)/nxyz
+            vomegaz_hat(i, j, k) = vomegaz_hat(i, j, k)/nxyz
+          enddo
+        enddo
+      enddo
+      ierr= cudaDeviceSynchronize()
 
-  !     energy = 0.5*sum(ux**2 + uy**2 + uz**2)/nxyz
+      ! Dealias Mode
+      
+      !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      do k = 1, nz
+         do j = 1, ny
+            do i = 1, nhp
+               if (id_absk(i, j, k) > klimit) then
+                  vomegax_hat(i, j, k) = 0.0
+                  vomegay_hat(i, j, k) = 0.0
+                  vomegaz_hat(i, j, k) = 0.0
+               end if
+            end do
+         end do
+      end do
+      ierr= cudaDeviceSynchronize()
 
-  !     norm_energy = energy/energy_0
-  !     write (10, '(I4, 1X, 1PE14.6, 1X, 1PE14.6)') istep, istep*dt, norm_energy
-  !     do k = 1, nz
-  !        do j = 1, ny
-  !           do i = 1, nhp
-  !              omegax_hat(i, j, k) = cmplx(0, 1)*(ky(i, j, k)*uz_hat(i, j, k) - kz(i, j, k)*uy_hat(i, j, k))
-  !              omegay_hat(i, j, k) = cmplx(0, 1)*(kz(i, j, k)*ux_hat(i, j, k) - kx(i, j, k)*uz_hat(i, j, k))
-  !              omegaz_hat(i, j, k) = cmplx(0, 1)*(kx(i, j, k)*uy_hat(i, j, k) - ky(i, j, k)*ux_hat(i, j, k))
-  !           end do
-  !        end do
-  !     end do
+     ! Compute RHS
+     call compute_rhs(nhp, ny, nz, visc, rhsx_hat, rhsy_hat, rhsz_hat, &
+                         vomegax_hat, vomegay_hat, vomegaz_hat, & 
+                         ux_hat, uy_hat, uz_hat, kx, ky, kz, k2, k2inv &
+                         )
 
-  !     call fft_inverse_execute(omegax_hat, vortx, plan_b)
-  !     call fft_inverse_execute(omegay_hat, vorty, plan_b)
-  !     call fft_inverse_execute(omegaz_hat, vortz, plan_b)
+     ierr=cudaDeviceSynchronize()
+      
+     ! Stage storage for time integrator at first step
 
-  !     do k = 1, nz
-  !        do j = 1, ny
-  !           do i = 1, nx
-  !              velvortx(i, j, k) = uy(i, j, k)*vortz(i, j, k) - uz(i, j, k)*vorty(i, j, k)
-  !              velvorty(i, j, k) = uz(i, j, k)*vortx(i, j, k) - ux(i, j, k)*vortz(i, j, k)
-  !              velvortz(i, j, k) = ux(i, j, k)*vorty(i, j, k) - uy(i, j, k)*vortx(i, j, k)
-  !           end do
-  !        end do
-  !     end do
+      if (istep == 1) then
+         rhsx_prev_hat = vomegax_hat
+         rhsy_prev_hat = vomegay_hat
+         rhsz_prev_hat = vomegaz_hat
+      end if
+     ierr=cudaDeviceSynchronize()
+     
 
-  !     !print *, 'rec_curl', velvortx(1:2, 1:2, 1:2)
+      ! Time integrate
 
-  !     call fft_forward_execute(velvortx, vomegax_hat, plan_f)
-  !     call fft_forward_execute(velvorty, vomegay_hat, plan_f)
-  !     call fft_forward_execute(velvortz, vomegaz_hat, plan_f)
+    call ab_time_integrator(nhp, nx, ny, dt, ux_hat, uy_hat, uz_hat, &
+                              rhsx_prev_hat, rhsy_prev_hat, rhsz_prev_hat, &
+                              rhsx_hat, rhsy_hat, rhsz_hat)
 
-  !     ! Dealias Mode
-  !     do k = 1, nz
-  !        do j = 1, ny
-  !           do i = 1, nhp
-  !              if (id_absk(i, j, k) > klimit) then
-  !                 vomegax_hat(i, j, k) = 0.0
-  !                 vomegay_hat(i, j, k) = 0.0
-  !                 vomegaz_hat(i, j, k) = 0.0
-  !              end if
-  !           end do
-  !        end do
-  !     end do
+    ierr=cudaDeviceSynchronize()
+     
+    ! Stage Storage for AB Integrator
+    rhsx_prev_hat = rhsx_hat
+    rhsy_prev_hat = rhsy_hat
+    rhsz_prev_hat = rhsz_hat
+    ierr=cudaDeviceSynchronize()
+  end do
 
-  !     ! Compute RHS
+   !ierr = ierr + cufftDestroy(plan)
+   !ierr = ierr + cufftDestroy(plan)
+   !deallocate (ux, uy, uz)
+   !deallocate (vortx_ini, vorty_ini, vortz_ini)
 
-  !     do k = 1, nz
-  !        do j = 1, ny
-  !           do i = 1, nhp
-  !              rhsx_hat(i, j, k) = &
-  !                 vomegax_hat(i, j, k) - &
-  !                 visc*k2(i, j, k)*ux_hat(i, j, k) - &
-  !                 kx(i, j, k)*k2inv(i, j, k)* &
-  !                 (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
-  !                  + kz(i, j, k)*vomegaz_hat(i, j, k))
+   call cpu_time(finish)
+   write (*, "(A, 1X, 1pe14.6)") 'elased_time:', finish - start
 
-  !              rhsy_hat(i, j, k) = &
-  !                 vomegay_hat(i, j, k) - &
-  !                 visc*k2(i, j, k)*uy_hat(i, j, k) - &
-  !                 ky(i, j, k)*k2inv(i, j, k)* &
-  !                 (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
-  !                  + kz(i, j, k)*vomegaz_hat(i, j, k))
-
-  !              rhsz_hat(i, j, k) = &
-  !                 vomegaz_hat(i, j, k) - &
-  !                 visc*k2(i, j, k)*uz_hat(i, j, k) - &
-  !                 kz(i, j, k)*k2inv(i, j, k)* &
-  !                 (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
-  !                  + kz(i, j, k)*vomegaz_hat(i, j, k))
-  !           end do
-  !        end do
-  !     end do
-
-  !     ! Stage storage for time integrator at first step
-
-  !     if (istep == 1) then
-  !        rhsx_prev_hat = vomegax_hat
-  !        rhsy_prev_hat = vomegay_hat
-  !        rhsz_prev_hat = vomegaz_hat
-  !     end if
-
-  !     ! Time integrate
-
-  !     call ab_time_integrator(nhp, nx, ny, dt, ux_hat, uy_hat, uz_hat, &
-  !                             rhsx_prev_hat, rhsy_prev_hat, rhsz_prev_hat, &
-  !                             rhsx_hat, rhsy_hat, rhsz_hat)
-
-  !     ! Stage Storage for AB Integrator
-  !     rhsx_prev_hat = rhsx_hat
-  !     rhsy_prev_hat = rhsy_hat
-  !     rhsz_prev_hat = rhsz_hat
-
-  !  end do
-
-  !  call fft_cleanup(plan_f)
-  !  call fft_cleanup(plan_b)
-  !  deallocate (ux, uy, uz)
-  !  deallocate (vortx_ini, vorty_ini, vortz_ini)
-
-  !  call cpu_time(finish)
-  !  write (*, "(A, 1X, 1pe14.6)") 'elased_time:', finish - start
-
-  ! close (10)
+  close (10)
 end program main
 

@@ -2,9 +2,9 @@ module cu_fft_module
    use cudafor
    implicit none
    private
-   public :: initial_condition, initial_vorticity, compute_wavenumbers
-   !public :: ab_time_integrator !, RK45_time_integrator, SSP_time_integrator
-   !public :: vtk_output
+   public :: initial_condition, initial_vorticity, compute_wavenumbers, compute_rhs
+   public :: ab_time_integrator !, RK45_time_integrator, SSP_time_integrator
+   public :: vtk_output
 contains
    subroutine initial_condition(n, ux, uy, uz)
       real(kind=c_float), managed, intent(inout) :: ux(n, n, n), uy(n, n, n), uz(n, n, n)
@@ -108,93 +108,79 @@ contains
     end do
   end subroutine compute_wavenumbers
 
-   ! ! Subroutine for initializing the infrastructure for FFTW
-   ! ! Which includes the creating forward and inverse plan and relevant data structures
-   ! subroutine fft_init(nx_in, ny_in, nz_in, in_array, out_array, plan_forward, plan_inverse)
-   !    type(C_PTR), intent(out) :: plan_forward
-   !    type(C_PTR), intent(out) :: plan_inverse
-   !    integer, intent(in), target :: nx_in
-   !    integer, intent(in) :: ny_in, nz_in
-   !    real(C_DOUBLE), intent(inout), target :: in_array(:, :, :)
-   !    complex(C_DOUBLE_COMPLEX), intent(inout), target :: out_array(:, :, :)
-   !    plan_forward = C_NULL_PTR
-   !    plan_inverse = C_NULL_PTR
+  subroutine compute_rhs(nhp, ny, nz, visc, rhsx_hat, rhsy_hat, rhsz_hat, &
+                         vomegax_hat, vomegay_hat, vomegaz_hat, ux_hat, uy_hat, uz_hat, &
+                         kx, ky, kz, k2, k2inv &
+                         )
 
-   !    nx = nx_in
-   !    ny = ny_in
-   !    nz = nz_in
-   !    ncube = nx*ny*nz
+    integer, intent(in) :: nhp,  ny, nz
+    real(kind=c_float), managed, intent(in) :: kx(nhp, ny, nz), ky(nhp, ny, nz), kz(nhp, ny, nz), k2(nhp, ny, nz), k2inv(nhp, ny, nz)
+    complex(kind=c_float_complex), managed, intent(inout) :: rhsx_hat(nhp, ny, nz), rhsy_hat(nhp, ny, nz), rhsz_hat(nhp, ny, nz)
+    complex(kind=c_float_complex), managed, intent(in) :: vomegax_hat(nhp, ny, nz), vomegay_hat(nhp, ny, nz), vomegaz_hat(nhp, ny, nz)
 
-   !    in_ptr => in_array
-   !    out_ptr => out_array
+    complex(kind=c_float_complex), managed, intent(in) :: ux_hat(nhp, ny, nz), uy_hat(nhp, ny, nz), uz_hat(nhp, ny, nz)
+    real(kind=c_float) :: visc
+    
+    integer :: i, j, k
+    
 
-   !    plan_forward = fftw_plan_dft_r2c_3d(nx, ny, nz, in_ptr, out_ptr, FFTW_ESTIMATE)
-   !    plan_inverse = fftw_plan_dft_c2r_3d(nx, ny, nz, out_ptr, in_ptr, FFTW_ESTIMATE)
+    !$cuf kernel do(3) <<< (*, *), (32, 4)>>>
+    do k = 1, nz
+         do j = 1, ny
+            do i = 1, nhp
+               rhsx_hat(i, j, k) = &
+                  vomegax_hat(i, j, k) - &
+                  visc*k2(i, j, k)*ux_hat(i, j, k) - &
+                  kx(i, j, k)*k2inv(i, j, k)* &
+                  (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
+                   + kz(i, j, k)*vomegaz_hat(i, j, k))
 
-   !    if (c_associated(plan_forward)) then
-   !       print *, "Forward plan success!"
-   !    end if
+               rhsy_hat(i, j, k) = &
+                  vomegay_hat(i, j, k) - &
+                  visc*k2(i, j, k)*uy_hat(i, j, k) - &
+                  ky(i, j, k)*k2inv(i, j, k)* &
+                  (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
+                   + kz(i, j, k)*vomegaz_hat(i, j, k))
 
-   !    if (c_associated(plan_inverse)) then
-   !       print *, "Inverse plan success!"
-   !    end if
+               rhsz_hat(i, j, k) = &
+                  vomegaz_hat(i, j, k) - &
+                  visc*k2(i, j, k)*uz_hat(i, j, k) - &
+                  kz(i, j, k)*k2inv(i, j, k)* &
+                  (kx(i, j, k)*vomegax_hat(i, j, k) + ky(i, j, k)*vomegay_hat(i, j, k) &
+                   + kz(i, j, k)*vomegaz_hat(i, j, k))
+            end do
+         end do
+      end do
 
-   !    print *, "In fft subroutine "
-   ! end subroutine fft_init
 
-   ! ! Forward FFT
-   ! subroutine fft_forward_execute(data_in_forward, data_out_forward, plan_forward)
-   !    type(C_PTR), intent(in) :: plan_forward
-   !    real(C_DOUBLE), intent(inout), target:: data_in_forward(:, :, :)
-   !    complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_out_forward(:, :, :)
-   !    in_ptr => data_in_forward
-   !    out_ptr => data_out_forward
-   !    call fftw_execute_dft_r2c(plan_forward, in_ptr, out_ptr)
-   ! end subroutine fft_forward_execute
+  end subroutine compute_rhs
+ 
 
-   ! ! Inverse FFT
-   ! subroutine fft_inverse_execute(data_in_inverse, data_out_inverse, plan_inverse)
-   !    type(C_PTR), intent(in) :: plan_inverse
-   !    real(C_DOUBLE), intent(inout), target :: data_out_inverse(:, :, :)
-   !    complex(C_DOUBLE_COMPLEX), intent(inout), target :: data_in_inverse(:, :, :)
-   !    out_ptr => data_in_inverse
-   !    in_ptr => data_out_inverse
-   !    call fftw_execute_dft_c2r(plan_inverse, out_ptr, in_ptr)
-   !    data_out_inverse(:, :, :) = data_out_inverse(:, :, :)/ncube
-   ! end subroutine fft_inverse_execute
+   subroutine ab_time_integrator( &
+      nhp, ny, nz, dt, &
+      ux_hat, uy_hat, uz_hat, &
+      rhsx_prev_hat, rhsy_prev_hat, rhsz_prev_hat, &
+      rhsx_hat, rhsy_hat, rhsz_hat)
+      
+      integer, intent(in) :: nhp, ny, nz
+      real(kind=c_float), intent(in) :: dt
+      complex(kind=c_float_complex), managed, intent(inout) :: ux_hat(nhp, ny, nz), uy_hat(nhp, ny, nz), uz_hat(nhp, ny, nz)
+      complex(kind=c_float_complex), managed, intent(in) :: rhsx_prev_hat(nhp, ny, nz), rhsy_prev_hat(nhp, ny, nz), rhsz_prev_hat(nhp, ny, nz)
+      complex(kind=c_float_complex), managed, intent(in) :: rhsx_hat(nhp, ny, nz), rhsy_hat(nhp, ny, nz), rhsz_hat(nhp, ny, nz)
+      integer :: i, j, k
 
-   ! ! clean up the fft analogous data structure and overheads
-   ! subroutine fft_cleanup(plan)
-   !    type(C_PTR), intent(inout) :: plan
-   !    if (c_associated(plan)) then
-   !       call fftw_destroy_plan(plan)
-   !       plan = C_NULL_PTR
-   !       print *, "Destroyed plan", plan
-   !    end if
-   ! end subroutine fft_cleanup
-
-   ! subroutine ab_time_integrator( &
-   !    nhp, ny, nz, dt, &
-   !    ux_hat, uy_hat, uz_hat, &
-   !    rhsx_prev_hat, rhsy_prev_hat, rhsz_prev_hat, &
-   !    rhsx_hat, rhsy_hat, rhsz_hat)
-   !    integer, intent(in) :: nhp, ny, nz
-   !    real(8), intent(in) :: dt
-   !    complex(C_DOUBLE_COMPLEX), intent(inout) :: ux_hat(:, :, :), uy_hat(:, :, :), uz_hat(:, :, :)
-   !    complex(C_DOUBLE_COMPLEX), intent(in) :: rhsx_prev_hat(:, :, :), rhsy_prev_hat(:, :, :), rhsz_prev_hat(:, :, :)
-   !    complex(C_DOUBLE_COMPLEX), intent(in) :: rhsx_hat(:, :, :), rhsy_hat(:, :, :), rhsz_hat(:, :, :)
-   !    integer :: i, j, k
-
-   !    do k = 1, nz
-   !       do j = 1, ny
-   !          do i = 1, nhp
-   !             ux_hat(i, j, k) = ux_hat(i, j, k) + 0.5*dt*(3*rhsx_hat(i, j, k) - rhsx_prev_hat(i, j, k))
-   !             uy_hat(i, j, k) = uy_hat(i, j, k) + 0.5*dt*(3*rhsy_hat(i, j, k) - rhsy_prev_hat(i, j, k))
-   !             uz_hat(i, j, k) = uz_hat(i, j, k) + 0.5*dt*(3*rhsz_hat(i, j, k) - rhsz_prev_hat(i, j, k))
-   !          end do
-   !       end do
-   !    end do
-   ! end subroutine ab_time_integrator
+     
+      !$cuf kernel do(3) <<< (*, *), (32, 4) >>>
+      do k = 1, nz
+         do j = 1, ny
+            do i = 1, nhp
+               ux_hat(i, j, k) = ux_hat(i, j, k) + 0.5*dt*(3*rhsx_hat(i, j, k) - rhsx_prev_hat(i, j, k))
+               uy_hat(i, j, k) = uy_hat(i, j, k) + 0.5*dt*(3*rhsy_hat(i, j, k) - rhsy_prev_hat(i, j, k))
+               uz_hat(i, j, k) = uz_hat(i, j, k) + 0.5*dt*(3*rhsz_hat(i, j, k) - rhsz_prev_hat(i, j, k))
+            end do
+         end do
+      end do
+   end subroutine ab_time_integrator
 
    ! subroutine RK45_time_integrator()
    !    print *, "in time integration"
@@ -204,41 +190,41 @@ contains
    !    print *, "in time integration"
    ! end subroutine SSP_time_integrator
 
-   ! subroutine vtk_output(field, dx, dy, dz)
-   !    real(8), allocatable, dimension(:, :, :), intent(in)::field
-   !    character(len=50) :: filename
-   !    real(8), intent(in):: dx, dy, dz
-   !    integer :: nx, ny, nz, i, j, k
-   !    integer :: unit
-   !    character(len=50) :: ext
-   !    character(len=50) :: output_file
+   subroutine vtk_output(sol_field, dx, dy, dz, nx, ny, nz)
+      real(kind=c_float), managed, intent(in) :: sol_field(nx, ny, nz)
+      real, intent(in):: dx, dy, dz
+      integer, intent(in) :: nx, ny, nz
+      integer :: i, j, k
+      integer :: unit
 
-   !    ext = ".vts"
-   !    output_file = filename//ext
+      character(len=50) :: output_file
+      character(len=50) :: filename
+      !character(len=50) :: ext
+      
+      !ext = ".vts"
+      !output_file = filename//ext
+      
 
-   !    nx = size(field, 1)
-   !    ny = size(field, 2)
-   !    nz = size(field, 3)
+      
+      write (filename, "('field',i5.5,'.plt')") 10
+      open (unit=100, file=filename, status="replace")
 
-   !    write (filename, "('field',i10.10,'.plt')") 10
-   !    open (unit=100, file=filename, status="replace")
+      write (100, *) 'TITLE = "3D-Volume Data"'
+      write (100, *) 'VARIABLES = "X", "Y", "Z", "U"'
+      write (100, "('ZONE I=',i4,1x,', J=',i4,1x,', K=',i4,1x,'F=POINT')") nx, ny, nz
+      do k = 1, nx
+         do j = 1, ny
+            do i = 1, nz
+               write (100, '(3(f8.5,2x), 1pe15.7, 2x)') &
+                  (i - 0.5)*dx, (j - 0.5)*dy, (k - 0.5)*dz, &
+                  sol_field(i, j, k)
+            end do
+         end do
+      end do
+      close (unit)
+      print *, "finished writing file: ", trim(filename)
 
-   !    write (100, *) 'TITLE = "3D-Volume Data"'
-   !    write (100, *) 'VARIABLES = "X", "Y", "Z", "U"'
-   !    write (100, "('ZONE I=',i4,1x,', J=',i4,1x,', K=',i4,1x,'F=POINT')") nx, ny, nz
-   !    do k = 1, nx
-   !       do j = 1, ny
-   !          do i = 1, nz
-   !             write (100, '(3(f8.5,2x), 1pe15.7, 2x)') &
-   !                (i - 0.5)*dx, (j - 0.5)*dy, (k - 0.5)*dz, &
-   !                field(i, j, k)
-   !          end do
-   !       end do
-   !    end do
-   !    close (unit)
-   !    print *, "finished writing file", trim(filename)
-
-   ! end subroutine vtk_output
+   end subroutine vtk_output
 
 end module cu_fft_module
 

@@ -30,6 +30,6 @@ $(EXE): $(MODULE_OBJ) $(MAIN_OBJ)
 
 # Clean
 clean:
-	rm -f $(EXE) *.o *.mod
+	rm -f $(EXE) *.o *.mod *.plt *.dat
 
 
