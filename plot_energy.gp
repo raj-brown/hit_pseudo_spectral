@@ -7,7 +7,8 @@ set ylabel "E"
 
 set grid
 
-#set key outside right font ",14"
-unset key
-
-plot "ke.txt"using 2:3 with lines lw 3 lc rgb "blue"
+set key inside top right box font ",14"
+#unset key
+plot \
+  "ke.txt" using 2:3 with lines lw 2 lc rgb "blue" title "CPU Code", \
+  "ke_gpu.txt" using 2:3 with lines lw 2 lc rgb "red" dt 2  title "GPU Code"

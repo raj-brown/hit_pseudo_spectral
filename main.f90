@@ -153,6 +153,8 @@ program main
 
       norm_energy = energy/energy_0
       write (10, '(I4, 1X, 1PE14.6, 1X, 1PE14.6)') istep, istep*dt, norm_energy
+      write (*, '(I4, 1X, 1PE14.6, 1X, 1PE14.6)') istep, istep*dt, energy_0
+    
       do k = 1, nz
          do j = 1, ny
             do i = 1, nhp
